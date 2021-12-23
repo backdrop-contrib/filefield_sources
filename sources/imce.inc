@@ -127,6 +127,8 @@ function filefield_source_imce_process($element, &$form_state, $form) {
     '#markup' => '<span id="' . $display_id . '" class="filefield-sources-imce-display">' . t('No file selected') . '</span> (<a class="filefield-sources-imce-browse" href="#" onclick="' . $imce_function . '">' . t('browse') . '</a>)',
   );
 
+  $ajax_path = 'file/ajax/' . implode('/', $element['#array_parents']) . '/' . $form['form_build_id']['#value'];
+  $token = backdrop_hmac_base64($ajax_path, backdrop_get_private_key() . backdrop_get_hash_salt());
   $element['filefield_imce']['select'] = array(
     '#name' => implode('_', $element['#array_parents']) . '_imce_select',
     '#type' => 'submit',
@@ -138,7 +140,7 @@ function filefield_source_imce_process($element, &$form_state, $form) {
     '#id' => $select_id,
     '#attributes' => array('style' => 'display: none;'),
     '#ajax' => array(
-      'path' => 'file/ajax/' . implode('/', $element['#array_parents']) . '/' . $form['form_build_id']['#value'],
+      'path' => $ajax_path. '/' . $token,
       'wrapper' => $element['upload_button']['#ajax']['wrapper'],
       'method' => 'replace',
       'effect' => 'fade',

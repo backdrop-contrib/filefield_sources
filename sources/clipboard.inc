@@ -79,11 +79,13 @@ function filefield_source_clipboard_process($element, &$form_state, $form) {
     '#type' => 'hidden',
     '#attributes' => array('class' => array('filefield-source-clipboard-contents')),
   );
+  $ajax_path = 'file/ajax/' . implode('/', $element['#array_parents']) . '/' . $form['form_build_id']['#value'];
+  $token = backdrop_hmac_base64($ajax_path, backdrop_get_private_key() . backdrop_get_hash_salt());
   $element['filefield_clipboard']['upload'] = array(
     '#type' => 'submit',
     '#value' => t('Upload'),
     '#ajax' => array(
-      'path' => 'file/ajax/' . implode('/', $element['#array_parents']) . '/' . $form['form_build_id']['#value'],
+      'path' => $ajax_path. '/' . $token,
       'wrapper' => $element['upload_button']['#ajax']['wrapper'],
       'effect' => 'fade',
       'progress' => array(

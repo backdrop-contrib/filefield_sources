@@ -89,7 +89,8 @@ function filefield_source_remote_process($element, &$form_state, $form) {
     '#description' => filefield_sources_element_validation_help($element['#upload_validators']),
     '#maxlength' => NULL,
   );
-
+  $ajax_path = 'file/ajax/' . implode('/', $element['#array_parents']) . '/' . $form['form_build_id']['#value'];
+  $token = backdrop_hmac_base64($ajax_path, backdrop_get_private_key() . backdrop_get_hash_salt());
   $element['filefield_remote']['transfer'] = array(
     '#name' => implode('_', $element['#array_parents']) . '_transfer',
     '#type' => 'submit',
@@ -98,7 +99,7 @@ function filefield_source_remote_process($element, &$form_state, $form) {
     '#submit' => array('filefield_sources_field_submit'),
     '#limit_validation_errors' => array($element['#parents']),
     '#ajax' => array(
-      'path' => 'file/ajax/' . implode('/', $element['#array_parents']) . '/' . $form['form_build_id']['#value'],
+      'path' => $ajax_path. '/' . $token,
       'wrapper' => $element['upload_button']['#ajax']['wrapper'],
       'effect' => 'fade',
       'progress' => array(
