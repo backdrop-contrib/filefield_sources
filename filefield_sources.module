@@ -625,8 +625,8 @@ function filefield_sources_clean_filename($filepath, $extensions) {
 
   $filename = basename($filepath);
 
-  if (module_exists('transliteration')) {
-    module_load_include('inc', 'transliteration');
+  if (config_get('system.core', 'file_transliterate_uploads')) {
+    include_once BACKDROP_ROOT . '/core/includes/transliteration.inc';
 
     $langcode = NULL;
     if (!empty($_POST['language'])) {
