@@ -90,13 +90,16 @@ function filefield_source_reference_settings($op, $instance) {
     $return['source_reference']['search_all_fields'] = array(
       '#title' => t('Files to search'),
       '#options' => array(
-        '0' => t('Only file fields with the same field base'),
-        '1' => t('All file fields, regardless of type'),
-        '2' => t('All managed files uploaded via Backdrop'),
+        '0' => t('This field'),
+        '1' => t('All file fields'),
+        '2' => t('All files'),
       ),
       '#type' => 'radios',
       '#default_value' => isset($settings['source_reference']['search_all_fields']) ? $settings['source_reference']['search_all_fields'] : '0',
     );
+    $return['source_reference']['search_all_fields']['0']['#description'] = t('Only files uploaded within the same base field.');
+    $return['source_reference']['search_all_fields']['1']['#description'] = t('Files uploaded across all file fields.');
+    $return['source_reference']['search_all_fields']['2']['#description'] = t('All uploaded files, including from the !url.', array('!url' => l('Manage files screen', 'admin/content/files')));
   }
   elseif ($op == 'save') {
     $return['source_reference']['autocomplete'] = '0';
@@ -230,6 +233,7 @@ function filefield_source_reference_get_files($filename, $instance = NULL) {
     // If we are looking at a single field, cache its settings, in case we want to search all fields.
     $setting_autocomplete = empty($instance['widget']['settings']['filefield_sources']['source_reference']['autocomplete']) ? 0 : 1;
     $setting_search_all_fields = empty($instance['widget']['settings']['filefield_sources']['source_reference']['search_all_fields']) ? 0 : $instance['widget']['settings']['filefield_sources']['source_reference']['search_all_fields'];
+    $file_extensions = empty($instance['settings']['file_extensions']) ? '' : $instance['settings']['file_extensions'];
   }
 
   $instances = array();
@@ -262,7 +266,9 @@ function filefield_source_reference_get_files($filename, $instance = NULL) {
     $result = $query->execute();
 
     foreach ($result as $file) {
-      $files[$file->fid] = $file;
+      if (_filefield_source_reference_check_extensions($file, $file_extensions)) {
+        $files[$file->fid] = $file;
+      }
     }
 
     return $files;
@@ -305,4 +311,23 @@ function filefield_source_reference_get_files($filename, $instance = NULL) {
   }
 
   return $files;
+}
+
+/**
+ * Check that the filename ends with a valid extension.
+ *
+ * @param object $file
+ *   A file object from file_managed table.
+ * @param string $extensions
+ *   A string with a space separated list of allowed extensions.
+ *
+ * @return
+ *   Boolean
+ */
+function _filefield_source_reference_check_extensions($file, $extensions) {
+  $regex = '/\.(' . preg_replace('/ +/', '|', preg_quote($extensions)) . ')$/i';
+  if (!preg_match($regex, $file->filename)) {
+    return FALSE;
+  }
+  return TRUE;
 }
