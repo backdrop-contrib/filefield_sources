@@ -254,11 +254,13 @@ function filefield_source_reference_get_files($filename, $instance = NULL) {
   // entire result.
   if ($setting_search_all_fields == 2) {
     $like = empty($setting_autocomplete) ? (db_like($filename) . '%') : ('%' . db_like($filename) . '%');
+    $regex = '\.(' . preg_replace('/ +/', '|', preg_quote($file_extensions)) . ')$';
 
     $query = db_select('file_managed', 'f');
     $query->fields('f');
     $query->condition('f.status', 1);
     $query->condition('f.filename', $like, 'LIKE');
+    $query->condition('f.filename', $regex, 'REGEXP');
     $query->orderBy('f.timestamp', 'DESC');
     $query->groupBy('f.fid');
     $query->range(0, 30);
@@ -266,9 +268,7 @@ function filefield_source_reference_get_files($filename, $instance = NULL) {
     $result = $query->execute();
 
     foreach ($result as $file) {
-      if (_filefield_source_reference_check_extensions($file, $file_extensions)) {
-        $files[$file->fid] = $file;
-      }
+      $files[$file->fid] = $file;
     }
 
     return $files;
@@ -311,23 +311,4 @@ function filefield_source_reference_get_files($filename, $instance = NULL) {
   }
 
   return $files;
-}
-
-/**
- * Check that the filename ends with a valid extension.
- *
- * @param object $file
- *   A file object from file_managed table.
- * @param string $extensions
- *   A string with a space separated list of allowed extensions.
- *
- * @return
- *   Boolean
- */
-function _filefield_source_reference_check_extensions($file, $extensions) {
-  $regex = '/\.(' . preg_replace('/ +/', '|', preg_quote($extensions)) . ')$/i';
-  if (!preg_match($regex, $file->filename)) {
-    return FALSE;
-  }
-  return TRUE;
 }
