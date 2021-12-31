@@ -55,6 +55,11 @@ function filefield_source_attach_settings($op, $instance) {
       '#description' => t('File attach allows for selecting a file from a directory on the server, commonly used in combination with FTP.') . ' <strong>' . t('This file source will ignore file size checking when used.') . '</strong>',
       '#element_validate' => array('_filefield_source_attach_file_path_validate'),
       '#weight' => 3,
+      '#states' => array(
+        'visible' => array(
+          ':input[name="instance[widget][settings][filefield_sources][filefield_sources][attach]"]' => array('checked' => TRUE),
+        ),
+      ),
     );
     $return['source_attach']['path'] = array(
       '#type' => 'textfield',

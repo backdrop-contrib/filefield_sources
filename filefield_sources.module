@@ -91,20 +91,17 @@ function filefield_sources_form($instance, &$form_state) {
   $enabled = _filefield_sources_enabled($settings);
 
   $form['filefield_sources'] = array(
-    '#type' => 'fieldset',
-    '#title' => t('File sources'),
-    '#collapsible' => TRUE,
-    '#collapsed' => TRUE,
+    '#type' => 'container',
     '#weight' => 20,
   );
 
   $sources = filefield_sources_list();
   $form['filefield_sources']['filefield_sources'] = array(
     '#type' => 'checkboxes',
-    '#title' => t('Enabled sources'),
+    '#title' => t('File sources'),
     '#options' => $sources,
     '#default_value' => $enabled,
-    '#description' => t('Select the available locations from which this widget may select files.'),
+    '#description' => t('Select the available locations from which this field may select files.'),
   );
 
   // Make sure all includes are loaded for multistep forms.
