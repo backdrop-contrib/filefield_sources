@@ -88,14 +88,18 @@ function filefield_source_reference_settings($op, $instance) {
     );
 
     $return['source_reference']['search_all_fields'] = array(
-      '#title' => t('Search all file fields'),
+      '#title' => t('Files to search'),
       '#options' => array(
-        '0' => t('No (only fields with the same field base will be searched)'),
-        '1' => t('Yes (all file fields will be searched, regardless of type)'),
+        '0' => t('This field'),
+        '1' => t('All file fields'),
+        '2' => t('All files'),
       ),
       '#type' => 'radios',
       '#default_value' => isset($settings['source_reference']['search_all_fields']) ? $settings['source_reference']['search_all_fields'] : '0',
     );
+    $return['source_reference']['search_all_fields']['0']['#description'] = t('Only files uploaded within the same base field.');
+    $return['source_reference']['search_all_fields']['1']['#description'] = t('Files uploaded across all file fields.');
+    $return['source_reference']['search_all_fields']['2']['#description'] = t('All uploaded files, including from the !url.', array('!url' => l('Manage files screen', 'admin/content/files')));
   }
   elseif ($op == 'save') {
     $return['source_reference']['autocomplete'] = '0';
@@ -228,7 +232,8 @@ function filefield_source_reference_get_files($filename, $instance = NULL) {
   if (isset($instance)) {
     // If we are looking at a single field, cache its settings, in case we want to search all fields.
     $setting_autocomplete = empty($instance['widget']['settings']['filefield_sources']['source_reference']['autocomplete']) ? 0 : 1;
-    $setting_search_all_fields = empty($instance['widget']['settings']['filefield_sources']['source_reference']['search_all_fields']) ? 0 : 1;
+    $setting_search_all_fields = empty($instance['widget']['settings']['filefield_sources']['source_reference']['search_all_fields']) ? 0 : $instance['widget']['settings']['filefield_sources']['source_reference']['search_all_fields'];
+    $file_extensions = empty($instance['settings']['file_extensions']) ? '' : $instance['settings']['file_extensions'];
   }
 
   $instances = array();
@@ -244,6 +249,32 @@ function filefield_source_reference_get_files($filename, $instance = NULL) {
   }
 
   $files = array();
+
+  // If searching all managed files skip loading individual fields and return
+  // entire result.
+  if ($setting_search_all_fields == 2) {
+    $like = empty($setting_autocomplete) ? (db_like($filename) . '%') : ('%' . db_like($filename) . '%');
+    $regex = '\.(' . preg_replace('/ +/', '|', preg_quote($file_extensions)) . ')$';
+
+    $query = db_select('file_managed', 'f');
+    $query->fields('f');
+    $query->condition('f.status', 1);
+    $query->condition('f.filename', $like, 'LIKE');
+    $query->condition('f.filename', $regex, 'REGEXP');
+    $query->orderBy('f.timestamp', 'DESC');
+    $query->groupBy('f.fid');
+    $query->range(0, 30);
+    $query->addTag('filefield_source_reference_list');
+    $result = $query->execute();
+
+    foreach ($result as $file) {
+      $files[$file->fid] = $file;
+    }
+
+    return $files;
+  }
+
+  // Limiting search to file field(s).
   foreach ($instances as $instance) {
     // Load the field data, which contains the schema information.
     $field = field_info_field($instance['field_name']);
