@@ -91,21 +91,24 @@ function filefield_sources_form($instance, &$form_state) {
   $enabled = _filefield_sources_enabled($settings);
 
   $form['filefield_sources'] = array(
-    '#type' => 'fieldset',
-    '#title' => t('File sources'),
-    '#collapsible' => TRUE,
-    '#collapsed' => TRUE,
+    '#type' => 'container',
     '#weight' => 20,
   );
 
-  $sources = filefield_sources_list();
+  $sources_names = filefield_sources_list('name');
+  $sources_descriptions = filefield_sources_list('description');
+
   $form['filefield_sources']['filefield_sources'] = array(
     '#type' => 'checkboxes',
-    '#title' => t('Enabled sources'),
-    '#options' => $sources,
+    '#title' => t('File sources'),
+    '#options' => $sources_names,
     '#default_value' => $enabled,
-    '#description' => t('Select the available locations from which this widget may select files.'),
+    '#description' => t('Select the available locations from which this field may select files.'),
   );
+
+  foreach ($sources_descriptions as $key => $description) {
+    $form['filefield_sources']['filefield_sources'][$key]['#description'] = $description;
+  }
 
   // Make sure all includes are loaded for multistep forms.
   $sources_info = filefield_sources_info(FALSE);
@@ -375,14 +378,20 @@ function filefield_sources_info($include_default = TRUE) {
 }
 
 /**
- * Create a list of FileField Sources by name, suitable for a select list.
+ * Create a list of FileField Sources by key, suitable for a select list.
+ *
+ * @param string $source_key
+ * @param bool $include_default
+ *
+ * @return array
+ *   List of source info.
  */
-function filefield_sources_list($include_default = TRUE) {
+function filefield_sources_list($source_key, $include_default = TRUE) {
   $info = filefield_sources_info($include_default);
   $list = array();
 
   foreach ($info as $key => $source) {
-    $list[$key] = $source['name'];
+    $list[$key] = $source[$source_key];
   }
 
   return $list;

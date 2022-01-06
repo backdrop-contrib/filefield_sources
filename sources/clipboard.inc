@@ -15,7 +15,7 @@
 function filefield_source_clipboard_info() {
   $source = array();
   $source['clipboard'] = array(
-    'name' => t('Paste from clipboard (<a href="http://drupal.org/node/1775902">limited browser support</a>)'),
+    'name' => t('Paste from clipboard'),
     'label' => t('Clipboard'),
     'description' => t('Allow users to paste a file directly from the clipboard.'),
     'process' => 'filefield_source_clipboard_process',

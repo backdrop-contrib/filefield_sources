@@ -75,6 +75,11 @@ function filefield_source_reference_settings($op, $instance) {
       '#type' => 'fieldset',
       '#collapsible' => TRUE,
       '#collapsed' => TRUE,
+      '#states' => array(
+        'visible' => array(
+          ':input[name="instance[widget][settings][filefield_sources][filefield_sources][reference]"]' => array('checked' => TRUE),
+        ),
+      ),
     );
 
     $return['source_reference']['autocomplete'] = array(
