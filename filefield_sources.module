@@ -616,7 +616,7 @@ function filefield_sources_save_file($filepath, $validators = array(), $destinat
     // anonymous user. This allows modules such as the File module to only
     // grant view access to the specific anonymous user who uploaded the file.
     // See similar code in file_save_upload().
-    if (!$user->uid && !in_array($destination_scheme, variable_get('file_public_schema', array('public')))) {
+    if (!$user->uid && $destination_scheme === 'private') {
       $_SESSION['anonymous_allowed_file_ids'][$file->fid] = $file->fid;
     }
     return $file;
