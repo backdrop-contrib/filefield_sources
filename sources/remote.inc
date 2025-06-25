@@ -54,7 +54,7 @@ function filefield_source_remote_theme() {
       'render element' => 'element',
       'file' => 'sources/remote.inc',
     ),
- );
+  );
 }
 
 /**
@@ -80,7 +80,8 @@ function filefield_source_remote_process($element, &$form_state, $form) {
   $element['filefield_remote'] = array(
     '#weight' => 100.5,
     '#theme' => 'filefield_source_remote_element',
-    '#filefield_source' => TRUE, // Required for proper theming.
+  // Required for proper theming.
+    '#filefield_source' => TRUE,
     '#filefield_sources_hint_text' => FILEFIELD_SOURCE_REMOTE_HINT_TEXT,
   );
 
@@ -99,7 +100,7 @@ function filefield_source_remote_process($element, &$form_state, $form) {
     '#submit' => array('filefield_sources_field_submit'),
     '#limit_validation_errors' => array($element['#parents']),
     '#ajax' => array(
-      'path' => $ajax_path. '/' . $token,
+      'path' => $ajax_path . '/' . $token,
       'wrapper' => $element['upload_button']['#ajax']['wrapper'],
       'effect' => 'fade',
       'progress' => array(
@@ -152,7 +153,7 @@ function filefield_source_remote_value($element, &$item) {
     @curl_setopt($ch, CURLOPT_FOLLOWLOCATION, TRUE);
     // Set a user agent - some hosts block requests unless header is present.
     $curl_version = curl_version();
-    curl_setopt($ch,CURLOPT_USERAGENT,'PHP-curl/' . $curl_version['version']);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'PHP-curl/' . $curl_version['version']);
     curl_exec($ch);
     $info = curl_getinfo($ch);
     if ($info['http_code'] != 200) {
@@ -167,9 +168,11 @@ function filefield_source_remote_value($element, &$item) {
         case 403:
           form_error($element, t('The remote file could not be transferred because access to the file was denied.'));
           break;
+
         case 404:
           form_error($element, t('The remote file could not be transferred because it was not found.'));
           break;
+
         default:
           form_error($element, t('The remote file could not be transferred due to an HTTP error (@code).', array('@code' => $info['http_code'])));
       }
@@ -210,7 +213,7 @@ function filefield_source_remote_value($element, &$item) {
 
     // Perform basic extension check on the file before trying to transfer.
     $extensions = $field['settings']['file_extensions'];
-    $regex = '/\.('. preg_replace('/[ +]/', '|', preg_quote($extensions)) .')$/i';
+    $regex = '/\.(' . preg_replace('/[ +]/', '|', preg_quote($extensions)) . ')$/i';
     if (!empty($extensions) && !preg_match($regex, $filename)) {
       form_error($element, t('Only files with the following extensions are allowed: %files-allowed.', array('%files-allowed' => $extensions)));
       return;
@@ -248,12 +251,15 @@ function filefield_source_remote_value($element, &$item) {
       $ch = curl_init();
       curl_setopt($ch, CURLOPT_URL, $url);
       curl_setopt($ch, CURLOPT_HEADER, FALSE);
-      curl_setopt($ch, CURLOPT_WRITEFUNCTION, 'filefield_source_remote_curl_write');
+      // Pass a callable that does not require reference for CURLOPT_WRITEFUNCTION.
+      curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $data) {
+        return filefield_source_remote_curl_write($ch, $data);
+      });
       // Causes a warning if PHP safe mode is on.
       @curl_setopt($ch, CURLOPT_FOLLOWLOCATION, TRUE);
       // Set a user agent - some hosts block requests unless header is present.
       $curl_version = curl_version();
-      curl_setopt($ch,CURLOPT_USERAGENT,'PHP-curl/' . $curl_version['version']);
+      curl_setopt($ch, CURLOPT_USERAGENT, 'PHP-curl/' . $curl_version['version']);
       $transfer_success = curl_exec($ch);
       curl_close($ch);
     }
@@ -273,11 +279,11 @@ function filefield_source_remote_value($element, &$item) {
  */
 function _filefield_source_remote_parse_header($ch, $header) {
   if (preg_match('/Content-Disposition:.*?filename="(.+?)"/i', $header, $matches)) {
-    // Content-Disposition: attachment; filename="FILE NAME HERE"
+    // Content-Disposition: attachment; filename="FILE NAME HERE".
     _filefield_source_remote_filename($matches[1]);
   }
   elseif (preg_match('/Content-Disposition:.*?filename=([^; ]+)/i', $header, $matches)) {
-    // Content-Disposition: attachment; filename=file.ext
+    // Content-Disposition: attachment; filename=file.ext.
     $uri = trim($matches[1]);
     _filefield_source_remote_filename($uri);
   }
@@ -334,7 +340,7 @@ function filefield_source_remote_progress($entity_type, $bundle_name, $field_nam
     'percentage' => -1,
   );
 
-  if ($cache = cache_get('filefield_transfer:'. session_id() . ':' . $key)) {
+  if ($cache = cache_get('filefield_transfer:' . session_id() . ':' . $key)) {
     $current = $cache->data['current'];
     $total = $cache->data['total'];
     $progress['message'] = t('Transferring... (@current of @total)', array('@current' => format_size($current), '@total' => format_size($total)));
@@ -345,7 +351,7 @@ function filefield_source_remote_progress($entity_type, $bundle_name, $field_nam
 }
 
 /**
- * cURL write function to save the file to disk. Also updates progress bar.
+ * CURL write function to save the file to disk. Also updates progress bar.
  */
 function filefield_source_remote_curl_write(&$ch, $data) {
   $progress_update = 0;
@@ -361,7 +367,7 @@ function filefield_source_remote_curl_write(&$ch, $data) {
       'total' => curl_getinfo($ch, CURLINFO_CONTENT_LENGTH_DOWNLOAD),
     );
     // Set a cache so that we can retrieve this value from the progress bar.
-    $cid = 'filefield_transfer:'. session_id() . ':' . $options['key'];
+    $cid = 'filefield_transfer:' . session_id() . ':' . $options['key'];
     if ($progress['current'] != $progress['total']) {
       cache_set($cid, $progress, 'cache', time() + 300);
     }
