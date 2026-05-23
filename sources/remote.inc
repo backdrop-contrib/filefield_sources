@@ -118,9 +118,21 @@ function filefield_source_remote_process($element, &$form_state, $form) {
  * A #filefield_value_callback function.
  */
 function filefield_source_remote_value($element, &$item) {
-  if (isset($item['filefield_remote']['url']) && strlen($item['filefield_remote']['url']) > 0 && valid_url($item['filefield_remote']['url']) && $item['filefield_remote']['url'] != FILEFIELD_SOURCE_REMOTE_HINT_TEXT) {
+  if (isset($item['filefield_remote']['url']) && strlen($item['filefield_remote']['url']) > 0 && valid_url($item['filefield_remote']['url'], TRUE) && $item['filefield_remote']['url'] != FILEFIELD_SOURCE_REMOTE_HINT_TEXT) {
     $field = field_info_instance($element['#entity_type'], $element['#field_name'], $element['#bundle']);
     $url = $item['filefield_remote']['url'];
+
+    // Block SSRF: reject URLs resolving to private or reserved IP ranges.
+    $host = parse_url($url, PHP_URL_HOST);
+    if (!$host) {
+      form_error($element, t('The remote URL is invalid.'));
+      return;
+    }
+    $ip = gethostbyname($host);
+    if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+      form_error($element, t('The remote URL must not point to an internal or reserved address.'));
+      return;
+    }
 
     // Check that the destination is writable.
     $temporary_directory = 'temporary://';
@@ -149,6 +161,8 @@ function filefield_source_remote_value($element, &$item) {
     curl_setopt($ch, CURLOPT_NOBODY, TRUE);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
     curl_setopt($ch, CURLOPT_HEADERFUNCTION, '_filefield_source_remote_parse_header');
+    curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+    curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
     // Causes a warning if PHP safe mode is on.
     @curl_setopt($ch, CURLOPT_FOLLOWLOCATION, TRUE);
     // Set a user agent - some hosts block requests unless header is present.
@@ -251,10 +265,9 @@ function filefield_source_remote_value($element, &$item) {
       $ch = curl_init();
       curl_setopt($ch, CURLOPT_URL, $url);
       curl_setopt($ch, CURLOPT_HEADER, FALSE);
-      // Pass a callable that does not require reference for CURLOPT_WRITEFUNCTION.
-      curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $data) {
-        return filefield_source_remote_curl_write($ch, $data);
-      });
+      curl_setopt($ch, CURLOPT_WRITEFUNCTION, 'filefield_source_remote_curl_write');
+      curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+      curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
       // Causes a warning if PHP safe mode is on.
       @curl_setopt($ch, CURLOPT_FOLLOWLOCATION, TRUE);
       // Set a user agent - some hosts block requests unless header is present.

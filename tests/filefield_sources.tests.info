@@ -1,0 +1,5 @@
+[FilefieldSourceRemoteSsrfIpFilterTest]
+name = Remote source: SSRF IP-filter logic
+description = Verifies that private and reserved IPs are rejected and public IPs are accepted.
+group = FileField Sources
+file = filefield_sources_remote.test

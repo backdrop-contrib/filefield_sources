@@ -1,0 +1,224 @@
+<?php
+
+/**
+ * @file
+ * Tests for SSRF protections introduced in the remote source.
+ *
+ * Covers the changes from 1.patch:
+ *  - valid_url() is now called with $absolute = TRUE.
+ *  - Host resolves to a private/reserved IP → form_error().
+ *  - cURL is restricted to HTTP/HTTPS protocols on both HEAD and GET requests.
+ */
+
+/**
+ * Unit tests for the SSRF IP-range check logic in filefield_source_remote_value().
+ *
+ * These tests exercise the filter_var() expression that the patch added.
+ * They do not require a database or a running Backdrop installation.
+ */
+class FilefieldSourceRemoteSsrfIpFilterTest extends BackdropUnitTestCase {
+
+  /**
+   * Returns TRUE when an IP should be allowed (mirrors the patch condition).
+   */
+  protected function ipIsAllowed($ip) {
+    return (bool) filter_var(
+      $ip,
+      FILTER_VALIDATE_IP,
+      FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Private ranges (RFC 1918) — must be blocked.
+  // -------------------------------------------------------------------------
+
+  public function testPrivateClassA() {
+    $this->assertFalse($this->ipIsAllowed('10.0.0.1'),
+      '10.0.0.1 (RFC 1918 class-A) must be blocked.');
+  }
+
+  public function testPrivateClassB() {
+    $this->assertFalse($this->ipIsAllowed('172.16.0.1'),
+      '172.16.0.1 (RFC 1918 class-B start) must be blocked.');
+    $this->assertFalse($this->ipIsAllowed('172.31.255.255'),
+      '172.31.255.255 (RFC 1918 class-B end) must be blocked.');
+  }
+
+  public function testPrivateClassC() {
+    $this->assertFalse($this->ipIsAllowed('192.168.1.1'),
+      '192.168.1.1 (RFC 1918 class-C) must be blocked.');
+  }
+
+  // -------------------------------------------------------------------------
+  // Reserved / special-use ranges — must be blocked.
+  // -------------------------------------------------------------------------
+
+  public function testLoopback() {
+    $this->assertFalse($this->ipIsAllowed('127.0.0.1'),
+      '127.0.0.1 (loopback) must be blocked.');
+    $this->assertFalse($this->ipIsAllowed('127.255.255.255'),
+      '127.255.255.255 (loopback range end) must be blocked.');
+  }
+
+  public function testUnspecified() {
+    $this->assertFalse($this->ipIsAllowed('0.0.0.0'),
+      '0.0.0.0 (unspecified) must be blocked.');
+  }
+
+  public function testLinkLocal() {
+    $this->assertFalse($this->ipIsAllowed('169.254.0.1'),
+      '169.254.0.1 (link-local) must be blocked.');
+  }
+
+  public function testBroadcast() {
+    $this->assertFalse($this->ipIsAllowed('255.255.255.255'),
+      '255.255.255.255 (broadcast) must be blocked.');
+  }
+
+  // -------------------------------------------------------------------------
+  // Public IPs — must be allowed.
+  // -------------------------------------------------------------------------
+
+  public function testPublicGoogleDns() {
+    $this->assertTrue($this->ipIsAllowed('8.8.8.8'),
+      '8.8.8.8 (public Google DNS) must be allowed.');
+  }
+
+  public function testPublicExampleCom() {
+    // 93.184.216.34 is the IP for example.com at time of writing.
+    $this->assertTrue($this->ipIsAllowed('93.184.216.34'),
+      '93.184.216.34 (example.com) must be allowed.');
+  }
+
+  public function testPublicCloudflare() {
+    $this->assertTrue($this->ipIsAllowed('1.1.1.1'),
+      '1.1.1.1 (Cloudflare DNS) must be allowed.');
+  }
+
+  // -------------------------------------------------------------------------
+  // Extension check does NOT protect against SSRF.
+  //
+  // The cURL HEAD request fires before the extension check runs, so an
+  // attacker can probe internal services with a URL that has a valid
+  // extension (e.g. http://192.168.1.1/secrets.txt).  The IP check here
+  // is the only gate that fires before the network connection is made.
+  // -------------------------------------------------------------------------
+
+  public function testPrivateIpWithValidExtensionIsStillBlocked() {
+    $this->assertFalse($this->ipIsAllowed('192.168.1.1'),
+      'http://192.168.1.1/secrets.txt has a valid extension but the IP must be blocked before cURL fires.');
+  }
+
+  public function testAwsMetadataIpIsBlocked() {
+    // 169.254.169.254 is the AWS instance-metadata endpoint — a common SSRF
+    // target reachable with a URL like http://169.254.169.254/latest/meta-data/hostname.txt
+    // which would pass an extension check.
+    $this->assertFalse($this->ipIsAllowed('169.254.169.254'),
+      '169.254.169.254 (AWS metadata) must be blocked before cURL fires.');
+  }
+
+  // -------------------------------------------------------------------------
+  // Malformed / non-IP strings returned by gethostbyname() when DNS fails.
+  // gethostbyname() returns the original hostname on failure, which is not
+  // a valid IP, so filter_var() must reject it.
+  // -------------------------------------------------------------------------
+
+  public function testNonIpStringIsRejected() {
+    $this->assertFalse($this->ipIsAllowed('notanip'),
+      'A non-IP string (DNS failure) must be treated as blocked.');
+    $this->assertFalse($this->ipIsAllowed('internal.corp'),
+      'An unresolvable hostname string must be treated as blocked.');
+  }
+}
+
+/**
+ * Unit tests for the absolute-URL enforcement change.
+ *
+ * The patch changes valid_url($url) → valid_url($url, TRUE), which means
+ * relative URLs must no longer pass validation.
+ */
+class FilefieldSourceRemoteAbsoluteUrlTest extends BackdropUnitTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name'        => 'Remote source: absolute URL enforcement',
+      'description' => 'Verifies that valid_url() now requires an absolute URL.',
+      'group'       => 'FileField Sources',
+    );
+  }
+
+  public function testAbsoluteHttpUrlIsValid() {
+    $this->assertTrue(valid_url('http://example.com/file.png', TRUE),
+      'An absolute HTTP URL must pass valid_url() with $absolute = TRUE.');
+  }
+
+  public function testAbsoluteHttpsUrlIsValid() {
+    $this->assertTrue(valid_url('https://example.com/file.png', TRUE),
+      'An absolute HTTPS URL must pass valid_url() with $absolute = TRUE.');
+  }
+
+  public function testRelativeUrlIsInvalid() {
+    $this->assertFalse(valid_url('/path/to/file.png', TRUE),
+      'A root-relative URL must fail valid_url() with $absolute = TRUE.');
+  }
+
+  public function testProtocolRelativeUrlIsInvalid() {
+    $this->assertFalse(valid_url('//example.com/file.png', TRUE),
+      'A protocol-relative URL must fail valid_url() with $absolute = TRUE.');
+  }
+
+  public function testBareFilenameIsInvalid() {
+    $this->assertFalse(valid_url('file.png', TRUE),
+      'A bare filename must fail valid_url() with $absolute = TRUE.');
+  }
+
+  public function testEmptyStringIsInvalid() {
+    $this->assertFalse(valid_url('', TRUE),
+      'An empty string must fail valid_url() with $absolute = TRUE.');
+  }
+}
+
+/**
+ * Unit tests confirming that parse_url() host extraction works as expected
+ * for edge cases that trigger the "invalid URL" error path in the patch.
+ */
+class FilefieldSourceRemoteParseUrlHostTest extends BackdropUnitTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name'        => 'Remote source: parse_url host extraction',
+      'description' => 'Verifies that URLs without a host are caught before DNS resolution.',
+      'group'       => 'FileField Sources',
+    );
+  }
+
+  protected function extractHost($url) {
+    return parse_url($url, PHP_URL_HOST);
+  }
+
+  public function testNormalUrlHasHost() {
+    $this->assertEqual('example.com', $this->extractHost('https://example.com/file.png'),
+      'A normal URL must yield a non-empty host.');
+  }
+
+  public function testUrlWithoutHostReturnsNull() {
+    // parse_url returns NULL (falsy) for schemes without an authority component.
+    $result = $this->extractHost('file:///etc/passwd');
+    // The file:// scheme has no host in this form, so the patch blocks it.
+    $this->assertFalse((bool) $result,
+      'A file:// URL without an explicit host must be rejected (falsy host).');
+  }
+
+  public function testDataUriHasNoHost() {
+    $result = $this->extractHost('data:text/plain,hello');
+    $this->assertFalse((bool) $result,
+      'A data: URI must be rejected (falsy host).');
+  }
+
+  public function testJavascriptSchemeHasNoHost() {
+    $result = $this->extractHost('javascript:alert(1)');
+    $this->assertFalse((bool) $result,
+      'A javascript: URI must be rejected (falsy host).');
+  }
+}
